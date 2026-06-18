@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>钢材碳足迹计算工具 | Steel Carbon Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); }
+        .gradient-bg { background: linear-gradient(135deg, #0f766e 0%, #134e4a 50%, #064e3b 100%); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+        .input-focus:focus { ring: 2px; ring-color: #0d9488; border-color: #0d9488; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: slideIn 0.5s ease-out; }
+        .tab-active { border-bottom: 2px solid #0d9488; color: #0d9488; }
+        .print-only { display: none; }
+        @media print { 
+            .no-print { display: none !important; } 
+            .print-only { display: block !important; }
+            body { background: white; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- 顶部导航 -->
+    <nav class="gradient-bg text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight">钢材碳足迹计算器</h1>
+                        <p class="text-xs text-teal-200">Steel Carbon Footprint Calculator v2.0</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4 no-print">
+                    <button onclick="exportDatabase()" class="px-4 py-2 bg-teal-700 hover:bg-teal-600 rounded-lg text-sm font-medium transition flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        <span>导出数据库</span>
+                    </button>
+                    <label class="px-4 py-2 bg-teal-700 hover:bg-teal-600 rounded-lg text-sm font-medium transition flex items-center space-x-2 cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        <span>导入数据库</span>
+                        <input type="file" id="dbImport" class="hidden" accept=".json" onchange="importDatabase(this)">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 标签页导航 -->
+    <div class="bg-white border-b no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8">
+                <button onclick="switchTab('calculator')" id="tab-calculator" class="tab-active py-4 px-1 text-sm font-medium border-b-2 border-transparent hover:text-teal-700 transition">
+                    🧮 碳足迹计算
+                </button>
+                <button onclick="switchTab('database')" id="tab-database" class="py-4 px-1 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-teal-700 transition">
+                    🗄️ 材料数据库
+                </button>
+                <button onclick="switchTab('reports')" id="tab-reports" class="py-4 px-1 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-teal-700 transition">
+                    📊 报告中心
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- ========== 计算面板 ========== -->
+        <div id="panel-calculator" class="space-y-6 animate-in">
+            
+            <!-- 项目信息 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <span class="w-8 h-8 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center mr-3 text-sm">1</span>
+                    项目信息
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">项目名称</label>
+                        <input type="text" id="projectName" placeholder="例如：XX大桥钢结构工程" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">计算日期</label>
+                        <input type="date" id="calcDate" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">核算标准</label>
+                        <select id="standard" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition">
+                            <option value="ISO14067">ISO 14067:2018</option>
+                            <option value="GHG Protocol">GHG Protocol</option>
+                            <option value="GB/T24067">GB/T 24067-2024</option>
+                            <option value="PAS2050">PAS 2050:2011</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 材料输入 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-900 flex items-center">
+                        <span class="w-8 h-8 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center mr-3 text-sm">2</span>
+                        钢材材料清单
+                    </h2>
+                    <button onclick="addMaterialRow()" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium flex items-center space-x-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        <span>添加材料</span>
+                    </button>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 rounded-tl-lg">材料类型</th>
+                                <th class="px-4 py-3">规格型号</th>
+                                <th class="px-4 py-3">重量 (kg)</th>
+                                <th class="px-4 py-3">排放因子 (kg CO₂e/kg)</th>
+                                <th class="px-4 py-3">来源</th>
+                                <th class="px-4 py-3 text-right">碳排放量 (kg CO₂e)</th>
+                                <th class="px-4 py-3 rounded-tr-lg text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="materialTableBody">
+                            <!-- 动态生成行 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-4 p-4 bg-gray-50 rounded-lg flex justify-between items-center">
+                    <span class="text-gray-600">总重量: <strong id="totalWeight" class="text-gray-900">0</strong> kg</span>
+                    <span class="text-xl font-bold text-teal-700">总碳排放: <span id="totalEmission">0</span> kg CO₂e</span>
+                </div>
+            </div>
+
+            <!-- 计算与报告 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <span class="w-8 h-8 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center mr-3 text-sm">3</span>
+                    计算与报告
+                </h2>
+                <div class="flex space-x-4">
+                    <button onclick="calculateCarbon()" class="flex-1 py-3 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-lg hover:from-teal-700 hover:to-teal-800 transition font-semibold shadow-lg shadow-teal-200">
+                        🚀 开始计算
+                    </button>
+                    <button onclick="generateReport()" id="btnReport" disabled class="flex-1 py-3 bg-gray-300 text-gray-500 rounded-lg font-semibold cursor-not-allowed transition">
+                        📄 生成碳足迹报告
+                    </button>
+                </div>
+            </div>
+
+            <!-- 结果展示 -->
+            <div id="resultPanel" class="hidden bg-white rounded-xl shadow-lg border border-teal-100 p-6 animate-in">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">📊 计算结果分析</h3>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <canvas id="emissionChart" height="250"></canvas>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-teal-50 rounded-lg border border-teal-200">
+                            <p class="text-sm text-teal-800 font-medium">总碳足迹</p>
+                            <p class="text-3xl font-bold text-teal-900" id="resultTotal">0</p>
+                            <p class="text-sm text-teal-600">kg CO₂e</p>
+                        </div>
+                        <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <p class="text-sm text-blue-800 font-medium">单位强度</p>
+                            <p class="text-3xl font-bold text-blue-900" id="resultIntensity">0</p>
+                            <p class="text-sm text-blue-600">kg CO₂e/kg 钢材</p>
+                        </div>
+                        <div class="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                            <p class="text-sm text-amber-800 font-medium">相当于</p>
+                            <p class="text-xl font-bold text-amber-900" id="resultEquivalent">0 棵树一年吸收量</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 数据库面板 ========== -->
+        <div id="panel-database" class="hidden space-y-6 animate-in">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">材料排放因子数据库</h2>
+                        <p class="text-sm text-gray-500 mt-1">管理钢材及关联材料的碳排放因子，支持导入/导出</p>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button onclick="resetDatabase()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">
+                            重置默认数据
+                        </button>
+                        <button onclick="addDatabaseItem()" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium">
+                            + 添加新材料
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4 flex space-x-4">
+                    <input type="text" id="dbSearch" placeholder="搜索材料名称..." onkeyup="renderDatabase()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
+                    <select id="dbFilter" onchange="renderDatabase()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
+                        <option value="all">全部类别</option>
+                        <option value="steel">钢材类</option>
+                        <option value="alloy">合金类</option>
+                        <option value="coating">涂层/表面处理</option>
+                        <option value="transport">运输</option>
+                    </select>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3">材料名称</th>
+                                <th class="px-4 py-3">类别</th>
+                                <th class="px-4 py-3">排放因子</th>
+                                <th class="px-4 py-3">单位</th>
+                                <th class="px-4 py-3">数据来源</th>
+                                <th class="px-4 py-3">更新时间</th>
+                                <th class="px-4 py-3 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="databaseTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 报告面板 ========== -->
+        <div id="panel-reports" class="hidden space-y-6 animate-in">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">历史报告存档</h2>
+                <div id="reportsList" class="space-y-3">
+                    <p class="text-gray-500 text-center py-8">暂无保存的报告</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 报告预览模态框 -->
+    <div id="reportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-900">碳足迹报告预览</h3>
+                <div class="flex space-x-3">
+                    <button onclick="printReport()" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm">
+                        🖨️ 打印/PDF
+                    </button>
+                    <button onclick="closeReport()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm">
+                        关闭
+                    </button>
+                </div>
+            </div>
+            <div id="reportContent" class="p-8">
+                <!-- 报告内容动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 数据层 ====================
+        
+        // 默认排放因子数据库 (基于IPCC 2019 & 中国生命周期基础数据库)
+        const DEFAULT_DATABASE = [
+            { id: 's001', name: '普通碳素结构钢 (Q235)', category: 'steel', factor: 2.15, unit: 'kg CO₂e/kg', source: 'IPCC 2019 / 中国钢铁工业协会', updated: '2024-01-15', description: '热轧碳钢，含冶炼、轧制过程' },
+            { id: 's002', name: '低合金高强度钢 (Q345/Q355)', category: 'steel', factor: 2.25, unit: 'kg CO₂e/kg', source: 'World Steel Association', updated: '2024-01-15', description: '含锰合金元素，强度更高' },
+            { id: 's003', name: '优质碳素结构钢 (45#钢)', category: 'steel', factor: 2.30, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '机械结构用钢' },
+            { id: 's004', name: '不锈钢 (304/0Cr18Ni9)', category: 'steel', factor: 3.85, unit: 'kg CO₂e/kg', source: 'ISSF / Thinkstep', updated: '2024-01-15', description: '奥氏体不锈钢，含镍铬合金' },
+            { id: 's005', name: '不锈钢 (316L)', category: 'steel', factor: 4.20, unit: 'kg CO₂e/kg', source: 'ISSF / Thinkstep', updated: '2024-01-15', description: '含钼不锈钢，耐腐蚀性更强' },
+            { id: 's006', name: '耐候钢 (Q355NH)', category: 'steel', factor: 2.35, unit: 'kg CO₂e/kg', source: '中国生命周期基础数据库', updated: '2024-01-15', description: '含铜、磷、铬耐候元素' },
+            { id: 's007', name: '钢筋 (HRB400)', category: 'steel', factor: 2.05, unit: 'kg CO₂e/kg', source: 'GB/T 51366-2019', updated: '2024-01-15', description: '建筑用螺纹钢' },
+            { id: 's008', name: '钢筋 (HRB500)', category: 'steel', factor: 2.12, unit: 'kg CO₂e/kg', source: 'GB/T 51366-2019', updated: '2024-01-15', description: '高强度建筑钢筋' },
+            { id: 's009', name: '型钢 (H型钢)', category: 'steel', factor: 2.18, unit: 'kg CO₂e/kg', source: '中国钢铁工业协会', updated: '2024-01-15', description: '热轧H型钢' },
+            { id: 's010', name: '冷轧钢板', category: 'steel', factor: 2.45, unit: 'kg CO₂e/kg', source: 'World Steel Association', updated: '2024-01-15', description: '冷轧工艺，表面质量好' },
+            { id: 's011', name: '镀锌钢板', category: 'steel', factor: 2.65, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '含热浸镀锌工艺' },
+            { id: 's012', name: '彩涂钢板', category: 'steel', factor: 2.80, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '有机涂层钢板' },
+            { id: 's013', name: '硅钢片 (取向)', category: 'steel', factor: 3.20, unit: 'kg CO₂e/kg', source: '中国生命周期基础数据库', updated: '2024-01-15', description: '变压器用高硅钢' },
+            { id: 's014', name: '工具钢', category: 'steel', factor: 3.50, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '高碳高合金工具钢' },
+            { id: 's015', name: '轴承钢', category: 'steel', factor: 2.90, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '高纯净度轴承专用钢' },
+            { id: 'a001', name: '废钢 (回收料)', category: 'alloy', factor: 0.45, unit: 'kg CO₂e/kg', source: 'World Steel Association', updated: '2024-01-15', description: '电弧炉回收废钢' },
+            { id: 'a002', name: '生铁', category: 'alloy', factor: 1.95, unit: 'kg CO₂e/kg', source: 'IPCC 2019', updated: '2024-01-15', description: '高炉生铁' },
+            { id: 'c001', name: '热浸镀锌层', category: 'coating', factor: 3.20, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '锌镀层附加排放' },
+            { id: 'c002', name: '电镀锌层', category: 'coating', factor: 3.80, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '电解锌镀层' },
+            { id: 'c003', name: '喷漆涂层', category: 'coating', factor: 4.50, unit: 'kg CO₂e/kg', source: 'Ecoinvent 3.8', updated: '2024-01-15', description: '有机涂料及喷涂工艺' },
+            { id: 't001', name: '公路运输 (柴油卡车)', category: 'transport', factor: 0.062, unit: 'kg CO₂e/t·km', source: 'GB/T 24067-2024', updated: '2024-01-15', description: '重型柴油货车运输' },
+            { id: 't002', name: '铁路运输', category: 'transport', factor: 0.015, unit: 'kg CO₂e/t·km', source: 'GB/T 24067-2024', updated: '2024-01-15', description: '电力机车货运' },
+            { id: 't003', name: '海运', category: 'transport', factor: 0.008, unit: 'kg CO₂e/t·km', source: 'GB/T 24067-2024', updated: '2024-01-15', description: '远洋货轮运输' }
+        ];
+
+        // 状态管理
+        let db = JSON.parse(localStorage.getItem('carbonDB')) || JSON.parse(JSON.stringify(DEFAULT_DATABASE));
+        let materials = [{ id: 1, type: 's001', spec: '', weight: 1000, factor: 2.15, source: '数据库', emission: 2150 }];
+        let currentResult = null;
+        let reports = JSON.parse(localStorage.getItem('carbonReports')) || [];
+        let chartInstance = null;
+
+        // ==================== 初始化 ====================
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('calcDate').valueAsDate = new Date();
+            renderMaterialTable();
+            renderDatabase();
+            renderReports();
+        });
+
+        // ==================== 标签切换 ====================
+        
+        function switchTab(tab) {
+            ['calculator', 'database', 'reports'].forEach(t => {
+                document.getElementById(`panel-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.remove('tab-active', 'text-teal-700');
+                document.getElementById(`tab-${t}`).classList.add('text-gray-500', 'border-transparent');
+            });
+            document.getElementById(`panel-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('tab-active', 'text-teal-700');
+            document.getElementById(`tab-${tab}`).classList.remove('text-gray-500', 'border-transparent');
+        }
+
+        // ==================== 材料表操作 ====================
+        
+        function renderMaterialTable() {
+            const tbody = document.getElementById('materialTableBody');
+            tbody.innerHTML = '';
+            let totalWeight = 0;
+            let totalEmission = 0;
+
+            materials.forEach((mat, index) => {
+                totalWeight += parseFloat(mat.weight) || 0;
+                totalEmission += parseFloat(mat.emission) || 0;
+
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50 transition';
+                tr.innerHTML = `
+                    <td class="px-4 py-3">
+                        <select onchange="updateMaterial(${index}, 'type', this.value)" class="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-teal-500">
+                            ${db.filter(d => d.category === 'steel' || d.category === 'alloy').map(d => 
+                                `<option value="${d.id}" ${mat.type === d.id ? 'selected' : ''}>${d.name}</option>`
+                            ).join('')}
+                        </select>
+                    </td>
+                    <td class="px-4 py-3"><input type="text" value="${mat.spec}" onchange="updateMaterial(${index}, 'spec', this.value)" class="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="如: Φ20×6000mm"></td>
+                    <td class="px-4 py-3"><input type="number" value="${mat.weight}" onchange="updateMaterial(${index}, 'weight', this.value)" class="w-full px-2 py-1 border border-gray-300 rounded text-sm" min="0" step="0.1"></td>
+                    <td class="px-4 py-3"><input type="number" value="${mat.factor}" onchange="updateMaterial(${index}, 'factor', this.value)" class="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-50" min="0" step="0.01"></td>
+                    <td class="px-4 py-3 text-xs text-gray-500">${mat.source}</td>
+                    <td class="px-4 py-3 text-right font-medium text-teal-700">${mat.emission.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="removeMaterial(${index})" class="text-red-500 hover:text-red-700 transition" title="删除">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('totalWeight').textContent = totalWeight.toLocaleString('zh-CN', {maximumFractionDigits: 2});
+            document.getElementById('totalEmission').textContent = totalEmission.toLocaleString('zh-CN', {maximumFractionDigits: 2});
+        }
+
+        function addMaterialRow() {
+            const defaultMat = db.find(d => d.category === 'steel') || db[0];
+            materials.push({
+                id: Date.now(),
+                type: defaultMat.id,
+                spec: '',
+                weight: 0,
+                factor: defaultMat.factor,
+                source: '数据库',
+                emission: 0
+            });
+            renderMaterialTable();
+        }
+
+        function removeMaterial(index) {
+            if (materials.length <= 1) {
+                alert('至少需要保留一行材料');
+                return;
+            }
+            materials.splice(index, 1);
+            renderMaterialTable();
+        }
+
+        function updateMaterial(index, field, value) {
+            const mat = materials[index];
+            if (field === 'type') {
+                const dbItem = db.find(d => d.id === value);
+                if (dbItem) {
+                    mat.type = value;
+                    mat.factor = dbItem.factor;
+                    mat.source = '数据库: ' + dbItem.source;
+                }
+            } else if (field === 'weight' || field === 'factor') {
+                mat[field] = parseFloat(value) || 0;
+                mat.emission = mat.weight * mat.factor;
+            } else {
+                mat[field] = value;
+            }
+            renderMaterialTable();
+        }
+
+        // ==================== 计算引擎 ====================
+        
+        function calculateCarbon() {
+            const projectName = document.getElementById('projectName').value || '未命名项目';
+            
+            let totalWeight = 0;
+            let totalEmission = 0;
+            const breakdown = [];
+
+            materials.forEach(mat => {
+                const weight = parseFloat(mat.weight) || 0;
+                const factor = parseFloat(mat.factor) || 0;
+                const emission = weight * factor;
+                totalWeight += weight;
+                totalEmission += emission;
+                
+                const dbItem = db.find(d => d.id === mat.type);
+                breakdown.push({
+                    name: dbItem ? dbItem.name : mat.type,
+                    spec: mat.spec,
+                    weight: weight,
+                    emission: emission,
+                    percentage: 0 // 稍后计算
+                });
+            });
+
+            if (totalWeight === 0) {
+                alert('请输入材料重量');
+                return;
+            }
+
+            breakdown.forEach(b => b.percentage = (b.emission / totalEmission * 100).toFixed(1));
+
+            currentResult = {
+                projectName,
+                date: document.getElementById('calcDate').value,
+                standard: document.getElementById('standard').value,
+                totalWeight,
+                totalEmission,
+                intensity: totalEmission / totalWeight,
+                equivalent: Math.round(totalEmission / 22), // 一棵树年吸收约22kg CO2
+                breakdown,
+                materials: JSON.parse(JSON.stringify(materials))
+            };
+
+            // 显示结果
+            document.getElementById('resultPanel').classList.remove('hidden');
+            document.getElementById('resultTotal').textContent = totalEmission.toLocaleString('zh-CN', {maximumFractionDigits: 2});
+            document.getElementById('resultIntensity').textContent = currentResult.intensity.toFixed(3);
+            document.getElementById('resultEquivalent').textContent = `${currentResult.equivalent.toLocaleString('zh-CN')} 棵树一年吸收量`;
+
+            // 启用报告按钮
+            const btn = document.getElementById('btnReport');
+            btn.disabled = false;
+            btn.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+            btn.classList.add('bg-teal-600', 'text-white', 'hover:bg-teal-700');
+
+            // 渲染图表
+            renderChart(breakdown);
+
+            // 自动滚动到结果
+            document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderChart(breakdown) {
+            const ctx = document.getElementById('emissionChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const colors = ['#0d9488', '#14b8a6', '#5eead4', '#2dd4bf', '#99f6e4', '#ccfbf1', '#f59e0b', '#fbbf24'];
+            
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: breakdown.map(b => b.name),
+                    datasets: [{
+                        data: breakdown.map(b => b.emission),
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 12, padding: 15, font: { size: 11 } }
+                        },
+                        title: {
+                            display: true,
+                            text: '碳排放构成分析',
+                            font: { size: 14, weight: 'bold' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const val = context.raw;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = (val / total * 100).toFixed(1);
+                                    return `${context.label}: ${val.toFixed(2)} kg (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==================== 报告生成 ====================
+        
+        function generateReport() {
+            if (!currentResult) return;
+
+            const reportId = 'RPT-' + Date.now();
+            const report = {
+                id: reportId,
+                ...currentResult,
+                createdAt: new Date().toISOString()
+            };
+
+            reports.unshift(report);
+            localStorage.setItem('carbonReports', JSON.stringify(reports));
+            renderReports();
+
+            // 显示报告模态框
+            showReportModal(report);
+        }
+
+        function showReportModal(report) {
+            const modal = document.getElementById('reportModal');
+            const content = document.getElementById('reportContent');
+            
+            const standardNames = {
+                'ISO14067': 'ISO 14067:2018 温室气体-产品碳足迹-量化要求和指南',
+                'GHG Protocol': 'GHG Protocol 温室气体核算体系：产品标准',
+                'GB/T24067': 'GB/T 24067-2024 温室气体 产品碳足迹 量化要求和指南',
+                'PAS2050': 'PAS 2050:2011 商品和服务在生命周期内的温室气体排放评价规范'
+            };
+
+            content.innerHTML = `
+                <div class="print-only mb-8 text-center border-b-2 border-teal-800 pb-6">
+                    <h1 class="text-3xl font-bold text-teal-900 mb-2">产品碳足迹核算报告</h1>
+                    <p class="text-lg text-gray-600">Product Carbon Footprint Report</p>
+                    <p class="text-sm text-gray-500 mt-2">报告编号: ${report.id}</p>
+                </div>
+
+                <div class="no-print mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-sm text-blue-800">💡 提示：点击右上角"打印/PDF"按钮可导出为PDF格式报告</p>
+                </div>
+
+                <div class="space-y-8">
+                    <!-- 1. 报告概要 -->
+                    <section>
+                        <h3 class="text-lg font-bold text-gray-900 border-l-4 border-teal-600 pl-3 mb-4">1. 报告概要</h3>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div class="p-3 bg-gray-50 rounded"><span class="text-gray-500">项目名称:</span> <strong>${report.projectName}</strong></div>
+                            <div class="p-3 bg-gray-50 rounded"><span class="text-gray-500">核算日期:</span> <strong>${report.date}</strong></div>
+                            <div class="p-3 bg-gray-50 rounded"><span class="text-gray-500">核算标准:</span> <strong>${standardNames[report.standard] || report.standard}</strong></div>
+                            <div class="p-3 bg-gray-50 rounded"><span class="text-gray-500">报告编号:</span> <strong>${report.id}</strong></div>
+                        </div>
+                    </section>
+
+                    <!-- 2. 核算结果 -->
+                    <section>
+                        <h3 class="text-lg font-bold text-gray-900 border-l-4 border-teal-600 pl-3 mb-4">2. 碳足迹核算结果</h3>
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="p-4 bg-teal-50 rounded-lg text-center border border-teal-200">
+                                <p class="text-2xl font-bold text-teal-900">${report.totalEmission.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</p>
+                                <p class="text-xs text-teal-700 mt-1">总碳足迹 (kg CO₂e)</p>
+                            </div>
+                            <div class="p-4 bg-blue-50 rounded-lg text-center border border-blue-200">
+                                <p class="text-2xl font-bold text-blue-900">${report.totalWeight.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</p>
+                                <p class="text-xs text-blue-700 mt-1">总重量 (kg)</p>
+                            </div>
+                            <div class="p-4 bg-amber-50 rounded-lg text-center border border-amber-200">
+                                <p class="text-2xl font-bold text-amber-900">${report.intensity.toFixed(3)}</p>
+                                <p class="text-xs text-amber-700 mt-1">碳排放强度 (kg CO₂e/kg)</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-600 leading-relaxed">
+                            本项目钢材产品碳足迹为 <strong>${report.totalEmission.toLocaleString('zh-CN', {maximumFractionDigits: 2})} kg CO₂e</strong>，
+                            相当于约 <strong>${report.equivalent.toLocaleString('zh-CN')}</strong> 棵成年树木一年的二氧化碳吸收量。
+                            单位产品碳排放强度为 <strong>${report.intensity.toFixed(3)} kg CO₂e/kg</strong>。
+                        </p>
+                    </section>
+
+                    <!-- 3. 材料清单明细 -->
+                    <section>
+                        <h3 class="text-lg font-bold text-gray-900 border-l-4 border-teal-600 pl-3 mb-4">3. 材料清单与排放明细</h3>
+                        <table class="w-full text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="border px-3 py-2 text-left">序号</th>
+                                    <th class="border px-3 py-2 text-left">材料名称</th>
+                                    <th class="border px-3 py-2 text-left">规格</th>
+                                    <th class="border px-3 py-2 text-right">重量 (kg)</th>
+                                    <th class="border px-3 py-2 text-right">碳排放 (kg CO₂e)</th>
+                                    <th class="border px-3 py-2 text-right">占比 (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${report.breakdown.map((b, i) => `
+                                    <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">
+                                        <td class="border px-3 py-2">${i + 1}</td>
+                                        <td class="border px-3 py-2">${b.name}</td>
+                                        <td class="border px-3 py-2">${b.spec || '-'}</td>
+                                        <td class="border px-3 py-2 text-right">${b.weight.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</td>
+                                        <td class="border px-3 py-2 text-right font-medium">${b.emission.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</td>
+                                        <td class="border px-3 py-2 text-right">${b.percentage}%</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr class="bg-teal-50 font-bold">
+                                    <td class="border px-3 py-2" colspan="3">合计</td>
+                                    <td class="border px-3 py-2 text-right">${report.totalWeight.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</td>
+                                    <td class="border px-3 py-2 text-right text-teal-900">${report.totalEmission.toLocaleString('zh-CN', {maximumFractionDigits: 2})}</td>
+                                    <td class="border px-3 py-2 text-right">100%</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </section>
+
+                    <!-- 4. 数据来源与假设 -->
+                    <section>
+                        <h3 class="text-lg font-bold text-gray-900 border-l-4 border-teal-600 pl-3 mb-4">4. 数据来源与核算假设</h3>
+                        <div class="text-sm text-gray-600 space-y-2">
+                            <p>• <strong>系统边界：</strong>从摇篮到大门 (Cradle-to-Gate)，包含原材料获取、运输及生产制造过程</p>
+                            <p>• <strong>排放因子来源：</strong>IPCC 2019、World Steel Association、Ecoinvent 3.8、中国生命周期基础数据库 (CLCD)</p>
+                            <p>• <strong>全球变暖潜势 (GWP)：</strong>基于IPCC AR6，100年时间尺度</p>
+                            <p>• <strong>分配方法：</strong>质量分配法 (Mass Allocation)</p>
+                            <p>• <strong>截断规则：</strong>单个物料输入<1%且累计<5%的输入可忽略</p>
+                        </div>
+                    </section>
+
+                    <!-- 5. 不确定性分析 -->
+                    <section>
+                        <h3 class="text-lg font-bold text-gray-900 border-l-4 border-teal-600 pl-3 mb-4">5. 不确定性说明</h3>
+                        <p class="text-sm text-gray-600 leading-relaxed">
+                            本核算结果存在以下不确定性来源：(1) 排放因子数据来源于行业平均值，与实际生产工艺可能存在偏差；
+                            (2) 原材料运输距离采用估算值；(3) 电力排放因子采用区域电网平均值。
+                            建议通过现场数据收集和供应商特定数据获取来降低不确定性。
+                        </p>
+                    </section>
+
+                    <!-- 6. 声明 -->
+                    <section class="pt-6 border-t">
+                        <p class="text-xs text-gray-500 leading-relaxed">
+                            本报告基于提供的数据和公开的排放因子数据库生成，仅供参考。正式的碳足迹认证需由第三方核查机构进行验证。
+                            报告生成时间: ${new Date(report.createdAt).toLocaleString('zh-CN')}
+                        </p>
+                    </section>
+                </div>
+            `;
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeReport() {
+            document.getElementById('reportModal').classList.add('hidden');
+        }
+
+        function printReport() {
+            window.print();
+        }
+
+        // ==================== 数据库管理 ====================
+        
+        function renderDatabase() {
+            const search = document.getElementById('dbSearch').value.toLowerCase();
+            const filter = document.getElementById('dbFilter').value;
+            const tbody = document.getElementById('databaseTableBody');
+            
+            const filtered = db.filter(item => {
+                const matchSearch = item.name.toLowerCase().includes(search) || item.id.toLowerCase().includes(search);
+                const matchFilter = filter === 'all' || item.category === filter;
+                return matchSearch && matchFilter;
+            });
+
+            tbody.innerHTML = filtered.map(item => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-4 py-3 font-medium text-gray-900">${item.name}</td>
+                    <td class="px-4 py-3"><span class="px-2 py-1 bg-gray-100 rounded text-xs">${getCategoryName(item.category)}</span></td>
+                    <td class="px-4 py-3 font-mono font-medium text-teal-700">${item.factor}</td>
+                    <td class="px-4 py-3 text-gray-500">${item.unit}</td>
+                    <td class="px-4 py-3 text-xs text-gray-500 max-w-xs truncate" title="${item.source}">${item.source}</td>
+                    <td class="px-4 py-3 text-xs text-gray-400">${item.updated}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="editDatabaseItem('${item.id}')" class="text-teal-600 hover:text-teal-800 mr-2" title="编辑">✏️</button>
+                        <button onclick="deleteDatabaseItem('${item.id}')" class="text-red-500 hover:text-red-700" title="删除">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-400">无匹配数据</td></tr>';
+            }
+        }
+
+        function getCategoryName(cat) {
+            const map = { steel: '钢材', alloy: '合金', coating: '涂层', transport: '运输' };
+            return map[cat] || cat;
+        }
+
+        function addDatabaseItem() {
+            const name = prompt('材料名称:');
+            if (!name) return;
+            const factor = parseFloat(prompt('排放因子 (kg CO₂e/kg):'));
+            if (isNaN(factor)) return;
+            
+            const newItem = {
+                id: 'custom-' + Date.now(),
+                name,
+                category: 'steel',
+                factor,
+                unit: 'kg CO₂e/kg',
+                source: '用户自定义',
+                updated: new Date().toISOString().split('T')[0],
+                description: ''
+            };
+            
+            db.push(newItem);
+            saveDatabase();
+            renderDatabase();
+            renderMaterialTable(); // 更新下拉选项
+        }
+
+        function editDatabaseItem(id) {
+            const item = db.find(d => d.id === id);
+            if (!item) return;
+            
+            const newFactor = parseFloat(prompt(`修改 [${item.name}] 的排放因子:`, item.factor));
+            if (!isNaN(newFactor)) {
+                item.factor = newFactor;
+                item.updated = new Date().toISOString().split('T')[0];
+                saveDatabase();
+                renderDatabase();
+                renderMaterialTable();
+            }
+        }
+
+        function deleteDatabaseItem(id) {
+            if (!confirm('确定删除该材料?')) return;
+            db = db.filter(d => d.id !== id);
+            saveDatabase();
+            renderDatabase();
+            renderMaterialTable();
+        }
+
+        function resetDatabase() {
+            if (!confirm('确定重置为默认数据库? 所有自定义数据将丢失。')) return;
+            db = JSON.parse(JSON.stringify(DEFAULT_DATABASE));
+            saveDatabase();
+            renderDatabase();
+            renderMaterialTable();
+        }
+
+        function saveDatabase() {
+            localStorage.setItem('carbonDB', JSON.stringify(db));
+        }
+
+        // ==================== 导入/导出 ====================
+        
+        function exportDatabase() {
+            const data = {
+                version: '2.0',
+                exportDate: new Date().toISOString(),
+                database: db,
+                reports: reports
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `carbon-database-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importDatabase(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.database) {
+                        db = data.database;
+                        saveDatabase();
+                    }
+                    if (data.reports) {
+                        reports = data.reports;
+                        localStorage.setItem('carbonReports', JSON.stringify(reports));
+                    }
+                    renderDatabase();
+                    renderMaterialTable();
+                    renderReports();
+                    alert('数据库导入成功!');
+                } catch (err) {
+                    alert('文件格式错误: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            input.value = ''; // 重置input
+        }
+
+        // ==================== 报告列表 ====================
+        
+        function renderReports() {
+            const container = document.getElementById('reportsList');
+            
+            if (reports.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">暂无保存的报告</p>';
+                return;
+            }
+
+            container.innerHTML = reports.map(r => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer" onclick='showReportModal(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center text-teal-700 font-bold text-sm">
+                            ${r.projectName.charAt(0)}
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">${r.projectName}</p>
+                            <p class="text-xs text-gray-500">${r.date} · ${r.standard} · ${r.totalEmission.toFixed(2)} kg CO₂e</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="event.stopPropagation(); deleteReport('${r.id}')" class="p-2 text-gray-400 hover:text-red-500 transition" title="删除">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function deleteReport(id) {
+            if (!confirm('确定删除该报告?')) return;
+            reports = reports.filter(r => r.id !== id);
+            localStorage.setItem('carbonReports', JSON.stringify(reports));
+            renderReports();
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('reportModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeReport();
+        });
+    </script>
+</body>
+</html>
